@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pds-ml"
+version = "0.0.1"
+authors = [
+  { name="Jeffrey Smith", email="jsmith@seti.org",
+    name="Douglas Caldwell", email="dcaldwell@seti.org"},
+]
+description = "An ML package for NASA's PDS"
+readme = "README.rst"
+license = { file="LICENSE" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/jcsmithhere/pds-ml"
+"Bug Tracker" = "https://github.com/jcsmithhere/pds-ml/issues"
