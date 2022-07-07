@@ -4,5 +4,6 @@ import sys
 from setuptools import setup
 
 setup(name='pds-ml',
-      packages=['self_supervised_learner'],
+      packages=['src/self_supervised_learner', 
+      'src/utilities'],
       )
