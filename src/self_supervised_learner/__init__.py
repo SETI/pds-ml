@@ -1,2 +1,2 @@
-from . import train
+from . import SSL
 from . import models
