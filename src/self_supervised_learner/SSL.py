@@ -16,10 +16,12 @@ from torchvision.datasets import ImageFolder
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-
 # from pl_bolts.callbacks.ssl_online import SSLOnlineEvaluator
-#from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
+
+from pytorch_lightning.loggers import TensorBoardLogger
+
+#from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning import loggers as pl_loggers
 from argparse import ArgumentParser
 
@@ -71,7 +73,7 @@ class SSL:
     learning_rate = 1e-3,
     hidden_dim = 128,
     patience = -1,
-    save_freq = -1,
+    ckpt_freq = -1,
     seed = 1729
             ):
 
@@ -91,7 +93,7 @@ class SSL:
         self.learning_rate = learning_rate 
         self.hidden_dim = hidden_dim 
         self.patience = patience 
-        self.save_freq = save_freq 
+        self.ckpt_freq = ckpt_freq 
         self.seed = seed 
 
         self._init_logging()
@@ -133,6 +135,12 @@ class SSL:
         """
         
         technique = supported_techniques[self.technique]
+        # Add technique specific additional arguments to dictionary passed to model constructor
+        parser = ArgumentParser()
+        additonal_args, _ = technique.add_model_specific_args(parser).parse_known_args()
+
+
+
         model_options = Enum(
             "Models_Implemented", "resnet18 imagenet_resnet18 resnet50 imagenet_resnet50"
         )
@@ -141,7 +149,9 @@ class SSL:
             self.checkpoint_path = self.model
         
             try:
-                return technique.load_from_checkpoint(**self.__dict__)
+                # Add the model specific additional args to the dictionary passed to the technique class constructor
+                args = self.__dict__ | additonal_args.__dict__
+                return technique.load_from_checkpoint(**args)
             except:
                 logging.info("Trying to return model encoder only...")
         
@@ -218,7 +228,12 @@ class SSL:
         
         # We are initing from scratch so we need to find out how many classes are in this dataset. This is relevant info for the CLASSIFIER
         self.num_classes = len(ImageFolder(self.DATA_PATH).classes)
-        return technique(**self.__dict__)
+
+
+       #return technique(**self.__dict__)
+        # Add the model specific additional args to the dictionary passed to the technique class constructor
+        args = self.__dict__ | additonal_args.__dict__
+        return technique(**args)
 
 
     def prepare_data(self):
@@ -274,10 +289,10 @@ class SSL:
         logger = logging.getLogger('training')
         
         # logging
-        #wandb_logger = None
-        if self.log_name is not None:
-            #wandb_logger = WandbLogger(name=log_name, project="Curator")
-            pass
+        #wandb_logger = WandbLogger(name=log_name, project="Curator")
+        TBlogger = TensorBoardLogger("tb_logs", name=self.log_name)
+        pass
+
         
         model = self.load_model()
         logger.info("Model architecture successfully loaded")
@@ -291,7 +306,7 @@ class SSL:
         ckpt_callback = ModelCheckpoint(
             monitor="train_loss",
             dirpath=os.path.join(os.getcwd(), "models"),
-            period=self.save_freq,
+            period=self.ckpt_freq,
             filename="model-{epoch:02d}-{train_loss:.2f}",
         )
         cbs.append(ckpt_callback)
@@ -303,7 +318,7 @@ class SSL:
             callbacks=cbs,
             distributed_backend=f"{backend}" if self.gpus > 1 else None,
             sync_batchnorm=True if self.gpus > 1 else False,
-            logger=True,
+            logger=TBlogger,
             enable_pl_optimizer=True,
         )
         
@@ -393,7 +408,7 @@ if __name__ == "__main__":
         "--technique", default=None, type=str, help="SIMCLR, SIMSIAM or CLASSIFIER"
     )
     parser.add_argument(
-        "--save_freq", default=-1, type=int, help="Number of epochs between checkpoints"
+        "--ckpt_freq", default=-1, type=int, help="Number of epochs between checkpoints"
     )
     parser.add_argument(
         "--seed", default=1729, type=int, help="random seed for run for reproducibility"
