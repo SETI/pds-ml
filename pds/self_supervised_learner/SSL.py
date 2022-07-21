@@ -27,7 +27,7 @@ from argparse import ArgumentParser
 
 # Internal Package Imports
 from .models import SIMCLR, SIMSIAM, CLASSIFIER, encoders
-from utilities import io_utilities as ioUtil
+from ..utilities import io_utilities as ioUtil
 
 # Dictionary of supported Techniques
 supported_techniques = {
@@ -238,7 +238,7 @@ class SSL:
 
     def prepare_data(self):
         """
-        Prepares the data by splitting the images into a traing, validation and optionally, a test set.
+        Prepares the data by splitting the images into a training, validation and optionally, a test set.
         
         Parameters
         ----------
