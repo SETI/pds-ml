@@ -30,7 +30,7 @@ class CLASSIFIER(pl.LightningModule):  # SSLFineTuner
     def __init__(
         self,
         encoder,
-        DATA_PATH,
+        TRAIN_PATH,
         VAL_PATH,
         hidden_dim,
         image_size,
@@ -41,7 +41,7 @@ class CLASSIFIER(pl.LightningModule):  # SSLFineTuner
     ):
         super().__init__()
 
-        self.DATA_PATH = DATA_PATH
+        self.TRAIN_PATH = TRAIN_PATH
         self.VAL_PATH = VAL_PATH
         self.transform = transform
         self.image_size = image_size
@@ -143,7 +143,7 @@ class CLASSIFIER(pl.LightningModule):  # SSLFineTuner
         Options = Enum("Loader", "fit test inference")
         if stage == Options.fit.name:
             train = self.transform(
-                self.DATA_PATH,
+                self.TRAIN_PATH,
                 batch_size=self.batch_size,
                 input_height=self.image_size,
                 copies=1,
@@ -168,7 +168,7 @@ class CLASSIFIER(pl.LightningModule):  # SSLFineTuner
         elif stage == Options.inference.name:
             self.test_dataloader = ClassifierWrapper(
                 transform=self.transform(
-                    self.DATA_PATH,
+                    self.TRAIN_PATH,
                     batch_size=self.batch_size,
                     input_height=self.image_size,
                     copies=1,

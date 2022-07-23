@@ -45,11 +45,15 @@ class SSL:
 
     # Pass the data path only if the tool will do it sown splitting
     DATA_PATH = None
-    # Also pass the VAL_PATH is you have already split the data
+    
+    # These are set automaticall as @property methods
+    TRAIN_PATH = None
     VAL_PATH = None
 
-    # Set by _init_logging
-    log_name = None
+    # batch_name is the name of the total training session (over all checkpoints)
+    batch_name = None
+    # ckpt_name is the name for each checkpoint run (all checkpoint runs equate to a batch run)
+    ckpt_name = None
 
     # Set by load_model
     checkpoint_path = None
@@ -61,8 +65,8 @@ class SSL:
     OUT_PATH,
     model,
     technique,
-    log_basename,
-    VAL_PATH = None,
+    ckpt_name,
+    batch_name,
     val_split = 0.2,
     test_split = 0.0,
     cpus = 1,
@@ -81,8 +85,8 @@ class SSL:
         self.OUT_PATH = OUT_PATH 
         self.model = model 
         self.technique = technique 
-        self.log_basename = log_basename 
-        self.VAL_PATH = VAL_PATH 
+        self.ckpt_name = ckpt_name
+        self.batch_name = batch_name
         self.val_split = val_split 
         self.test_split = test_split 
         self.cpus = cpus 
@@ -101,13 +105,34 @@ class SSL:
     def __repr__(self):
         return ioUtil.print_dictionary(self)
 
+    @property
+    def SPLIT_PATH(self):
+        """ This gives the top level path to the split data folders
+        The train and validation subdirectories ar eunder this path
+        """
+        return f"{self.OUT_PATH}/split_data_{self.technique}_{self.batch_name}"
+
+    @property
+    def TRAIN_PATH(self):
+        """ This gives where the training data set split is located.
+        """
+        return f"{self.SPLIT_PATH}/train"
+
+    @property
+    def VAL_PATH(self):
+        """ This gives where the validation data set split is located.
+        """
+        return f"{self.SPLIT_PATH}/val"
+
+
     def _init_logging(self):
         """
         This will set up loggin to print messages to both stdout and a log file
         """
 
-        self.log_name = self.technique + "_" + self.log_basename + ".ckpt"
-        file_handler = logging.FileHandler(filename="{}.log".format(self.log_name[:-5]))
+        self.ckpt_filename = self.technique + "_" + self.batch_name + "_" + self.ckpt_name + ".ckpt"
+        self.log_filename = self.technique + "_" + self.batch_name + "_" + self.ckpt_name + ".log"
+        file_handler = logging.FileHandler(filename=self.log_filename)
         stdout_handler = logging.StreamHandler(sys.stdout)
         handlers = [file_handler, stdout_handler]
        
@@ -116,6 +141,44 @@ class SSL:
             handlers=handlers
         )
         #format='[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s',
+
+    def prepare_data(self):
+        """
+        Prepares the data by splitting the images into a training, validation and optionally, a test set.
+        
+        Parameters
+        ----------
+        
+        Returns
+        -------
+            Nothing, but new directories are created and populated with the split datasets
+        
+        """
+        
+        logger = logging.getLogger('data_preparation')
+        
+        # Splitting Data into train and validation
+        logger.info("Automatically splitting data into train and validation data...")
+       #shutil.rmtree(f"{self.OUT_PATH}/split_data_{self.batch_name[:-5]}", ignore_errors=True)
+        shutil.rmtree(self.SPLIT_PATH, ignore_errors=True)
+
+        # Determine if we are doign a two-way or three-way split
+        if self.test_split <= 0.0:
+            ratio = (1 - self.val_split, 
+                     self.val_split)
+        else:
+            ratio = (
+                1 - self.val_split - self.test_split,
+                self.val_split,
+                self.test_split)
+
+        splitfolders.ratio(
+            self.DATA_PATH,
+            output=self.SPLIT_PATH,
+            ratio=ratio,
+            seed=self.seed,
+        )
+
 
 
     def load_model(self):
@@ -150,7 +213,9 @@ class SSL:
         
             try:
                 # Add the model specific additional args to the dictionary passed to the technique class constructor
-                args = self.__dict__ | additonal_args.__dict__
+                # Also add in the TRAIN_PATH and VAL_PATH
+                path_dict = {'TRAIN_PATH': self.TRAIN_PATH, 'VAL_PATH': self.VAL_PATH}
+                args = self.__dict__ | additonal_args.__dict__ | path_dict
                 return technique.load_from_checkpoint(**args)
             except:
                 logging.info("Trying to return model encoder only...")
@@ -227,55 +292,15 @@ class SSL:
                 )
         
         # We are initing from scratch so we need to find out how many classes are in this dataset. This is relevant info for the CLASSIFIER
-        self.num_classes = len(ImageFolder(self.DATA_PATH).classes)
+        self.num_classes = len(ImageFolder(self.TRAIN_PATH).classes)
 
 
        #return technique(**self.__dict__)
         # Add the model specific additional args to the dictionary passed to the technique class constructor
-        args = self.__dict__ | additonal_args.__dict__
+        # Also add in the TRAIN_PATH and VAL_PATH
+        path_dict = {'TRAIN_PATH': self.TRAIN_PATH, 'VAL_PATH': self.VAL_PATH}
+        args = self.__dict__ | additonal_args.__dict__ | path_dict
         return technique(**args)
-
-
-    def prepare_data(self):
-        """
-        Prepares the data by splitting the images into a training, validation and optionally, a test set.
-        
-        Parameters
-        ----------
-        
-        Returns
-        -------
-            These attributes change:
-            self.DATA_PATH -- now points to the training data subdirectory
-            self..VAL_PATH -- now points to the validation data subdirectory
-        
-        """
-        
-        logger = logging.getLogger('data_preparation')
-        
-        # Splitting Data into train and validation
-        if (
-            not (
-                os.path.isdir(f"{self.DATA_PATH}/train")
-                and os.path.isdir(f"{self.DATA_PATH}/val")
-            )
-            and self.val_split != 0
-            and self.VAL_PATH is None
-        ):
-            logger.info("Automatically splitting data into train and validation data...")
-            shutil.rmtree(f"{self.OUT_PATH}/split_data_{self.log_name[:-5]}", ignore_errors=True)
-            splitfolders.ratio(
-                self.DATA_PATH,
-                output=f"{self.OUT_PATH}/split_data_{self.log_name[:-5]}",
-                ratio=(
-                    1 - self.val_split - self.test_split,
-                    self.val_split,
-                    self.test_split,
-                ),
-                seed=self.seed,
-            )
-            self.DATA_PATH = f"{self.OUT_PATH}/split_data_{self.log_name[:-5]}/train"
-            self.VAL_PATH = f"{self.OUT_PATH}/split_data_{self.log_name[:-5]}/val"
 
 
     def train(self):
@@ -288,9 +313,12 @@ class SSL:
         """
         logger = logging.getLogger('training')
         
+        # Check if the train/val split already occured
+        assert os.path.exists(self.TRAIN_PATH), 'The train/val split has not occured, run SSL.prepare_data()'
+
         # logging
         #wandb_logger = WandbLogger(name=log_name, project="Curator")
-        TBlogger = TensorBoardLogger("tb_logs", name=self.log_name)
+        TBlogger = TensorBoardLogger("tb_logs", name=self.log_filename)
         pass
 
         
@@ -330,8 +358,8 @@ class SSL:
         logger.info("Total model fitting time: {:.2f} minutes, {:.2f} hours".format(totalTime/60, totalTime/60/60))
         
         Path(f"./models/").mkdir(parents=True, exist_ok=True)
-        trainer.save_checkpoint(f"./models/{self.log_name}")
-        logger.info("YOUR MODEL CAN BE ACCESSED AT: ./models/{}".format(self.log_name))
+        trainer.save_checkpoint(f"./models/{self.ckpt_filename}")
+        logger.info("YOUR MODEL CAN BE ACCESSED AT: ./models/{}".format(self.ckpt_filename))
 
 
 #******************************************************************************************

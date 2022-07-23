@@ -72,7 +72,7 @@ class SIMSIAM(SimSiam):
     def __init__(
         self,
         encoder,
-        DATA_PATH,
+        TRAIN_PATH,
         VAL_PATH,
         hidden_dim,
         image_size,
@@ -82,14 +82,14 @@ class SIMSIAM(SimSiam):
         **simsiam_hparams
     ):
 
-        data_temp = ImageFolder(DATA_PATH)
+        data_temp = ImageFolder(TRAIN_PATH)
 
         # derived values (not passed in) need to be added to model hparams
         simsiam_hparams["num_samples"] = len(data_temp)
         simsiam_hparams["dataset"] = None
         simsiam_hparams["max_epochs"] = simsiam_hparams["epochs"]
 
-        self.DATA_PATH = DATA_PATH
+        self.TRAIN_PATH = TRAIN_PATH
         self.VAL_PATH = VAL_PATH
         self.hidden_dim = hidden_dim
         self.transform = transform
@@ -120,7 +120,7 @@ class SIMSIAM(SimSiam):
         Options = Enum("Loader", "fit test inference")
         if stage == Options.fit.name:
             train = self.transform(
-                self.DATA_PATH,
+                self.TRAIN_PATH,
                 batch_size=self.batch_size,
                 input_height=self.image_size,
                 copies=3,
@@ -145,7 +145,7 @@ class SIMSIAM(SimSiam):
         elif stage == Options.inference.name:
             self.test_dataloader = SimCLRWrapper(
                 transform=self.transform(
-                    self.DATA_PATH,
+                    self.TRAIN_PATH,
                     batch_size=self.batch_size,
                     input_height=self.image_size,
                     copies=1,

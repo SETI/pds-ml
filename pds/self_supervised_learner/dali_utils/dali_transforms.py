@@ -7,7 +7,7 @@ from torchvision.datasets import ImageFolder
 class SimCLRTransform(Pipeline):
     def __init__(
         self,
-        DATA_PATH,
+        TRAIN_PATH,
         input_height,
         batch_size,
         copies,
@@ -21,13 +21,13 @@ class SimCLRTransform(Pipeline):
         )
 
         # this lets our pytorch compat function find the length of our dataset
-        self.num_samples = len(ImageFolder(DATA_PATH))
+        self.num_samples = len(ImageFolder(TRAIN_PATH))
 
         self.copies = copies
         self.input_height = input_height
         self.stage = stage
 
-        self.input = ops.FileReader(file_root=DATA_PATH, random_shuffle=True, seed=seed)
+        self.input = ops.FileReader(file_root=TRAIN_PATH, random_shuffle=True, seed=seed)
         self.to_int64 = ops.Cast(dtype=types.INT64, device="gpu")
         self.to_int32_cpu = ops.Cast(dtype=types.INT32, device="cpu")
 
