@@ -82,7 +82,14 @@ class SIMSIAM(SimSiam):
         **simsiam_hparams
     ):
 
-        data_temp = ImageFolder(TRAIN_PATH)
+        # If we are loading a model checkpoint on a machine without the training data used to train the model then the
+        # ImageFolder line below will fail. We do not need the training data in order to load a model to evaluate. So,
+        # continue loading the model even if the traingin data is not present.
+        try:
+            data_temp = ImageFolder(TRAIN_PATH)
+        except:
+            print('Failed loading training data.')
+            data_temp = []
 
         # derived values (not passed in) need to be added to model hparams
         simsiam_hparams["num_samples"] = len(data_temp)
