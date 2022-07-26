@@ -16,8 +16,8 @@ from torch.optim import SGD
 import pytorch_lightning as pl
 from pl_bolts.models.self_supervised.ssl_finetuner import SSLFineTuner
 from pl_bolts.models.self_supervised.evaluator import SSLEvaluator
-#from pytorch_lightning.metrics import Accuracy
-from torchmetrics import Accuracy
+from pytorch_lightning.metrics import Accuracy
+#from torchmetrics import Accuracy
 
 # Internal Imports
 from ..dali_utils.dali_transforms import (
