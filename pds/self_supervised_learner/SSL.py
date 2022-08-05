@@ -100,6 +100,9 @@ class SSL:
         self.ckpt_freq = ckpt_freq 
         self.seed = seed 
 
+        # Create the output directory if not already existant
+        Path(self.OUT_PATH).mkdir(parents=False, exist_ok=True)
+    
         self._init_logging()
 
     def __repr__(self):
@@ -108,7 +111,7 @@ class SSL:
     @property
     def SPLIT_PATH(self):
         """ This gives the top level path to the split data folders
-        The train and validation subdirectories ar eunder this path
+        The train and validation subdirectories are under this path
         """
         return f"{self.OUT_PATH}/split_data_{self.technique}_{self.batch_name}"
 
@@ -127,11 +130,12 @@ class SSL:
 
     def _init_logging(self):
         """
-        This will set up loggin to print messages to both stdout and a log file
+        This will set up logging to print messages to both stdout and a log file
         """
 
         self.ckpt_filename = self.technique + "_" + self.batch_name + "_" + self.ckpt_name + ".ckpt"
-        self.log_filename = self.technique + "_" + self.batch_name + "_" + self.ckpt_name + ".log"
+        self.log_filename = os.path.join(self.OUT_PATH, self.technique + "_" + self.batch_name + "_" + self.ckpt_name + ".log")
+        self.tensorboard_log_name = self.technique + "_" + self.batch_name + "_" + self.ckpt_name + ".log"
         file_handler = logging.FileHandler(filename=self.log_filename)
         stdout_handler = logging.StreamHandler(sys.stdout)
         handlers = [file_handler, stdout_handler]
@@ -155,11 +159,12 @@ class SSL:
         
         """
         
+        startTime = time.time()
+        
         logger = logging.getLogger('data_preparation')
         
         # Splitting Data into train and validation
         logger.info("Automatically splitting data into train and validation data...")
-       #shutil.rmtree(f"{self.OUT_PATH}/split_data_{self.batch_name[:-5]}", ignore_errors=True)
         shutil.rmtree(self.SPLIT_PATH, ignore_errors=True)
 
         # Determine if we are doign a two-way or three-way split
@@ -178,6 +183,10 @@ class SSL:
             ratio=ratio,
             seed=self.seed,
         )
+
+        endTime = time.time()
+        totalTime = endTime - startTime
+        logger.info("Data set successfully split: {:.2f} minutes, {:.2f} hours".format(totalTime/60, totalTime/60/60))
 
 
 
@@ -318,7 +327,7 @@ class SSL:
 
         # logging
         #wandb_logger = WandbLogger(name=log_name, project="Curator")
-        TBlogger = TensorBoardLogger("tb_logs", name=self.log_filename)
+        TBlogger = TensorBoardLogger(os.path.join(self.OUT_PATH, 'tb_logs'), name=self.tensorboard_log_name )
         pass
 
         
@@ -328,12 +337,16 @@ class SSL:
         cbs = []
         backend = "ddp"
         
+        # Create directory to store the saved models
+        model_path = os.path.join(self.OUT_PATH, './models/')
+        Path(model_path).mkdir(parents=False, exist_ok=True)
+
         if self.patience > 0:
             cb = EarlyStopping("val_loss", patience=self.patience)
             cbs.append(cb)
         ckpt_callback = ModelCheckpoint(
             monitor="train_loss",
-            dirpath=os.path.join(os.getcwd(), "models"),
+            dirpath=model_path,
             period=self.ckpt_freq,
             filename="model-{epoch:02d}-{train_loss:.2f}",
         )
@@ -357,9 +370,9 @@ class SSL:
         totalTime = endTime - startTime
         logger.info("Total model fitting time: {:.2f} minutes, {:.2f} hours".format(totalTime/60, totalTime/60/60))
         
-        Path(f"./models/").mkdir(parents=True, exist_ok=True)
-        trainer.save_checkpoint(f"./models/{self.ckpt_filename}")
-        logger.info("YOUR MODEL CAN BE ACCESSED AT: ./models/{}".format(self.ckpt_filename))
+        ckpt_full_name = os.path.join(model_path, self.ckpt_filename)
+        trainer.save_checkpoint(ckpt_full_name)
+        logger.info("YOUR MODEL CAN BE ACCESSED AT: {}".format(ckpt_full_name))
 
 
 #******************************************************************************************
