@@ -111,6 +111,7 @@ class Recommender(Evaluator):
 
                #plt.show()
                 input('Press the Any key')
+                plt.close()
 
 
         return

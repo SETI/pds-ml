@@ -1,6 +1,7 @@
 # This module is used to apply a Self-Supervised Learning model to a set of data to evaulate the scores.
 
 import torch
+import torchvision
 import torchvision.transforms as transforms
 from tqdm import tqdm
 from PIL import Image
@@ -17,9 +18,15 @@ class Evaluator():
 
     """
 
-    def __init__(self, model_path, technique, gpu_index=0):
+    def __init__(self, model_path, technique, softmax_outputs=False, gpu_index=0):
         """
         Constructor
+
+        The SSL classifier model does not softmax the outputs. The classifier returns a real number. We have the option
+        to apply a softmax to the output to get the result in the range [0,1], however, that has no real impact other
+        than renormalize the output values. If softmax_outputs = True then when you call evaluate_model a softmax is
+        applied to the outputs. Note that the normalization is dependent on the array of datums you are evaluating the
+        model on. TODO: set this up so that it uses a staticly set normalization factor.
 
         Parameters
         ----------
@@ -28,6 +35,8 @@ class Evaluator():
         technique : 
             model technique used {SIMCLR, SIMSIAM or CLASSIFIER}
             See: SSL.supported_techniques
+        softmax_outputs : bool
+            If True then apply a torch.nn.Softmax to the evaluation outputs, but only if technique=='CLASSIFIER'
         gpu_index : int
             Specify the GPU index to use for processing
             Only useful for a multi-GPU machine
@@ -36,6 +45,7 @@ class Evaluator():
 
         self.model_path = model_path
         self.technique = technique
+        self.softmax_outputs = softmax_outputs
         self.gpu_index = gpu_index
 
         # Used the correct loader for the specified technique
@@ -125,8 +135,35 @@ class Evaluator():
             with torch.no_grad():
                 # Get evaluation
                 evaluation[idx,:] = np.array(self.model(datapoint)[0].cpu()) 
+
+      # #***
+      # TODO: Figure out how to use torch DataLoader with the way the images are loaded for Lightning bolts SIMCLR,
+      # which uses the above 
+      # # Try using torchvision data loader
+      # def to_tensor(pil):
+      #     return torch.tensor(np.array(pil)).permute(2,0,1).float()
+      # image_transformer_test = transforms.Compose([
+      #             transforms.Resize((self.model.image_size,self.model.image_size)),
+      #             transforms.Lambda(to_tensor)
+      #             ])
+      # imageFiles_test = torchvision.datasets.ImageFolder(image_path, transform = image_transformer_test)
+      # embedding = torch.empty(size = (0, self.model.encoder.embedding_size)).cuda(self.gpu_index)
+      # bs = 64
+      # if len(imageFiles_test) < bs:
+      #     bs = 1
+      # loader = torch.utils.data.DataLoader(imageFiles_test, batch_size = bs, shuffle = False)
+      # for batch in tqdm(loader, 'Computing model image embeddings'):
+      #             
+      #     x = batch[0].cuda(self.gpu_index)
+      #     
+      #     with torch.no_grad():
+      #         embedding = torch.vstack((embedding, self.model(x)))
  
  
+        if self.softmax_outputs:
+            softmax_fcn = torch.nn.Softmax(dim=1)
+            evaluation = np.array(softmax_fcn(torch.tensor(evaluation)))
+
         return evaluation, imageFiles
 
 #*************************************************************************************************************
