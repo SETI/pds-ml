@@ -82,7 +82,7 @@ class Evaluator():
 
 
 
-    def evaluate_model(self, image_path):
+    def evaluate_model(self, image_path, verbosity=True, limit_to_n_images=None):
 
         '''      
         Generate Embeddings or classification for a given folder of images and a stored model.
@@ -92,13 +92,17 @@ class Evaluator():
         image_path : str
             Path to image folder dataset
             or list of individual files
+        verbosity : bool
+            If True then use tqdm to show progress
+        limit_to_n_images : int
+            If not None then limit the number of images evaluated to N
         
         Returns
         -------
         evaluation : (torch.Tensor) 
             Embeddings of the given model on the specified dataset.
             If evaluating a classifer then returns classification scores
-        imageFiles : str list
+        imageFiles : str np.array
             The list of image filenames in the order evaluated
         '''
  
@@ -112,6 +116,13 @@ class Evaluator():
             imageFiles = get_images(image_path)
         else:
             raise Exception('Error reading image_path')
+
+        imageFiles = np.array(imageFiles)
+
+        # Limit to N images
+        if limit_to_n_images is not None:
+            selected_images = np.random.choice(len(imageFiles), size=limit_to_n_images, replace=False)
+            imageFiles = imageFiles[selected_images]       
  
         #***
         # Extract embeddings for all the images
@@ -121,7 +132,7 @@ class Evaluator():
         else:
             evaluation = np.zeros([len(imageFiles), self.model.encoder.embedding_size])
  
-        for idx in tqdm(range(len(imageFiles)), 'Computing model image embeddings'):
+        for idx in tqdm(range(len(imageFiles)), 'Computing model image embeddings', disable=not verbosity):
             f = imageFiles[idx]
             
             im = Image.open(f).convert('RGB')
@@ -167,7 +178,7 @@ class Evaluator():
         return evaluation, imageFiles
 
 #*************************************************************************************************************
-def plot_top_n_images(classification, imageFiles, top_n=100, top_n_copy_loc=None):
+def plot_top_n_images(classification, imageFiles, top_n=100, class_index=0, top_n_copy_loc=None):
     """
     Displays the top N images based on the classification score
 
@@ -179,17 +190,19 @@ def plot_top_n_images(classification, imageFiles, top_n=100, top_n_copy_loc=None
         The list of image filenames in the order of classification
     top_n : int
         number of top images to plot
+    class_index : int
+        Index in classification array to utilize for scoring
     top_n_copy_loc : str
         Path to directory to copy the top n figures to
 
     """
 
     # Confirm a classification matrix is same size as list of images
-    assert len(classification[:,0]) == len(imageFiles), \
+    assert len(classification[:,class_index]) == len(imageFiles), \
         'Classification and imageFiles must be the same length'
 
     # Sort the images by classification score
-    sorted_images_idx = np.argsort(classification[:,0])[::-1]
+    sorted_images_idx = np.argsort(classification[:,class_index])[::-1]
 
     images_to_plot = imageFiles[sorted_images_idx[:top_n]]
 
