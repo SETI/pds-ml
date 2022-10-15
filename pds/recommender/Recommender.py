@@ -1,5 +1,6 @@
 # This module contains tools to egenrate recommended data using a self-supervised learning model
 
+import os
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 import matplotlib.pyplot as plt
@@ -13,11 +14,20 @@ from ..utilities.image_utils import plot_images
 class Recommender(Evaluator):
     """ Class used to return recommended data based on a SSL model and example data
 
-    It inhirents the self_supervised_learner.Evaluator.Evaluator class.
+    This inherents the self_supervised_learner.Evaluator.Evaluator class.
 
     """
 
-    def __init__(self, model_path, technique, image_path, metric='minkowski', p=2, gpu_index=0, n_jobs=1, limit_to_n_images=None):
+    def __init__(self, 
+            model_path, 
+            technique, 
+            image_path, 
+            metric='minkowski', 
+            p=2, 
+            kneighbors_expansion_factor=10, 
+            gpu_index=0, 
+            n_jobs=1, 
+            limit_to_n_images=None):
         """ Constructs the Recommender object and loads the set of images to recommend from..
 
         Parameters
@@ -27,7 +37,7 @@ class Recommender(Evaluator):
         technique : 
             model technique used {SIMCLR, SIMSIAM or CLASSIFIER}
         image_path  : str
-            The path to the images to recommend from
+            The path to the pool images to recommend from
         metric : str
             Distance metric to use
             see https://scikit-learn.org/stable/modules/generated/sklearn.metrics.pairwise.distance_metrics.html
@@ -35,12 +45,15 @@ class Recommender(Evaluator):
         p : int
             Minkowski metric parameter
             For p = 1 => manhattan_distance (l1), for p = 2 => euclidean_distance (l2)
+        kneighbors_expansion_factor : int
+            When performing a harminic mean nearest neighbors search, use this expansion factor when performing the initial search
+            over each individual sample.
         gpu_index : int
             Specify the GPU index to use for processing
             Only useful for a multi-GPU machine
         n_jobs : int
             Number of CPU cores to use when recommending. 
-            None means 1. -1 means using all processors.
+            None means 1 core. -1 means using all cores.
         limit_to_n_images : int
             If not None then limit the number of images being recommended to N
 
@@ -52,11 +65,13 @@ class Recommender(Evaluator):
         self.image_path = image_path
         self.metric = metric
         self.p = p
+        self.kneighbors_expansion_factor = kneighbors_expansion_factor
 
         # Evaluate the model on the passed images
         self.embedding, image_files = self.evaluate_model(image_path, limit_to_n_images=limit_to_n_images)
         # Convert image_files list into a ndarray
         self.image_files = np.array(image_files)
+        self.n_images = len(self.image_files)
 
         # Initialize a nearest neighbors object
         self.neighbors = NearestNeighbors(n_neighbors=10, metric=metric, p=p, n_jobs=n_jobs)
@@ -86,6 +101,9 @@ class Recommender(Evaluator):
             Embeddings of the given model on the specified dataset.
 
         """
+
+        if n_neighbors > self.n_images:
+            n_neighbors = self.n_images
 
         # Evaluate the model in the passed samples
         sample_embedding, sample_image_files = self.evaluate_model(samples, verbosity=verbosity)
@@ -174,7 +192,7 @@ class Recommender(Evaluator):
 
         return recommendations
 
-    def recommendations(self, samples, n_recommendations, method='harmonic_knn', plotting=True, verbosity=True):
+    def recommendations(self, samples, n_recommendations, method='harmonic_knn', do_not_recommend_samples=True, plotting=True, verbosity=True):
         """
         Returns N recommendations in aggregate over all sample images based on <method>.
 
@@ -193,6 +211,9 @@ class Recommender(Evaluator):
         method : str
             Recommendation method
             {'harmonic_knn'}
+        do_not_recommend_samples : bool
+            If True then do not recommend back any of the samples passed if they are in the Recommender.image_path images used to
+            construct the Recommender object.
         plotting : Bool
             If True then plot the recommendations
         verbosity : bool
@@ -209,18 +230,19 @@ class Recommender(Evaluator):
 
         assert method == 'harmonic_knn', "Only 'harmonic_knn' method currently supported"
 
-        if n_recommendations > len(self.image_files):
+        if n_recommendations > self.n_images:
             raise Exception('Can not find n_recommendations, please reduce the number of recommendations at or below the total number of pool images')
 
         # Find the nearest neighbors for each sample within a distance
         if method == 'harmonic_knn':
 
-            # Begin by finding n_recommendations for each sample target
-            neighbor_distance_matrix, neighbor_idx_matrix, sample_embedding = self.find_kneighbors(samples, n_recommendations, verbosity=verbosity)
+            # Begin by finding kneighbors_expansion_factor times n_recommendations for each sample target
+            neighbor_distance_matrix, neighbor_idx_matrix, sample_embedding = self.find_kneighbors(samples,
+                    int(self.kneighbors_expansion_factor * n_recommendations), verbosity=verbosity)
 
             #***
             # Flatten the arrays of neighbors, elliminate duplicates and compute the distance to all samples, in
-            # preparation to takign the harmonic mean.
+            # preparation to taking the harmonic mean.
 
             # Flatten index array
             neighbor_idx_with_dups = neighbor_idx_matrix.flatten()
@@ -228,6 +250,18 @@ class Recommender(Evaluator):
             # Elliminate duplicates
             neighbor_idx, unique_idx = np.unique(neighbor_idx_with_dups, return_index=True)
             neighbor_embeddings = self.embedding[neighbor_idx,:]
+
+            # Elliminate sample images from returned neighbors
+            # Get basename for all self.image_files
+            if do_not_recommend_samples:
+                image_files = [os.path.basename(filename) for filename in self.image_files]
+                # Get indices in the self.image_files corresponding to any sample images
+                sample_indices = []
+                for sample_file in samples:
+                    sample_indices.extend([idx for idx, filename in enumerate(image_files) if
+                                filename==os.path.basename(sample_file)])
+                neighbor_idx = np.setdiff1d(neighbor_idx, sample_indices)
+                neighbor_embeddings = self.embedding[neighbor_idx,:]
 
             # Compute distance to all sample images
             Y = cdist(neighbor_embeddings, sample_embedding, metric=self.metric, p=self.p)
