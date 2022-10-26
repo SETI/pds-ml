@@ -104,6 +104,9 @@ class Evaluator():
             If evaluating a classifer then returns classification scores
         imageFiles : str np.array
             The list of image filenames in the order evaluated
+        selected_images : [OPTIONAL] np.array(limit_to_n_images)
+            If limiting to N images, this is the indices of the selected images in imageFiles
+            Only returned if limit_to_n_images is not None:
         '''
  
         # Check if we have a list of files or a path to a folder
@@ -175,7 +178,10 @@ class Evaluator():
             softmax_fcn = torch.nn.Softmax(dim=1)
             evaluation = np.array(softmax_fcn(torch.tensor(evaluation)))
 
-        return evaluation, imageFiles
+        if limit_to_n_images is not None:
+            return evaluation, imageFiles, selected_images
+        else:
+            return evaluation, imageFiles
 
 #*************************************************************************************************************
 def plot_top_n_images(classification, imageFiles, top_n=100, class_index=0, top_n_copy_loc=None):
