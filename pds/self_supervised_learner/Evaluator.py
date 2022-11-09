@@ -110,7 +110,7 @@ class Evaluator():
         '''
  
         # Check if we have a list of files or a path to a folder
-        if isinstance(image_path, list):
+        if isinstance(image_path, list) or isinstance(image_path, np.ndarray):
             imageFiles = image_path
         elif os.path.isfile(image_path):
             imageFiles = [image_path]
